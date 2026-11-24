@@ -4,19 +4,26 @@ import http from 'k6/http';
 import { check } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 
-export const getContactsDuration = new Trend('get_contacts', true);
+export const getPostsDuration = new Trend('get_posts', true);
 export const RateContentOK = new Rate('content_OK');
 
 export const options = {
-  thresholds: {
-    http_req_failed: ['rate<0.30'],
-    get_contacts: ['p(99)<500'],
-    content_OK: ['rate>0.95']
-  },
+  // Rampa com 3 stages: inicia com 7 VUs, pico de 92 VUs, total de 3.5 min
+  vus: 7,
   stages: [
-    { duration: '5s', target: 2 },
-    { duration: '5s', target: 6 }
-  ]
+    { duration: '1m', target: 46 },
+    { duration: '1m30s', target: 92 },
+    { duration: '1m', target: 92 }
+  ],
+  // 3 thresholds
+  thresholds: {
+    // 90% das respostas abaixo de 6800ms
+    get_posts: ['p(90)<6800'],
+    // menos de 25% das requisicoes retornando erro
+    http_req_failed: ['rate<0.25'],
+    // pelo menos 75% das respostas com status 200
+    content_OK: ['rate>0.75']
+  }
 };
 
 export function handleSummary(data) {
@@ -27,23 +34,23 @@ export function handleSummary(data) {
 }
 
 export default function () {
-  const baseUrl = 'https://test.k6.io/';
+  const baseUrl = 'https://jsonplaceholder.typicode.com';
 
   const params = {
     headers: {
-      'Content-Type': 'application/json'
+      Accept: 'application/json'
     }
   };
 
   const OK = 200;
 
-  const res = http.get(`${baseUrl}`, params);
+  const res = http.get(`${baseUrl}/posts`, params);
 
-  getContactsDuration.add(res.timings.duration);
+  getPostsDuration.add(res.timings.duration);
 
   RateContentOK.add(res.status === OK);
 
   check(res, {
-    'GET Contacts - Status 200': () => res.status === OK
+    'GET Posts - Status 200': () => res.status === OK
   });
 }
